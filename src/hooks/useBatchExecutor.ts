@@ -4,6 +4,9 @@ import { useState, useCallback } from 'react'
 import { useWalletClient, useAccount, useSwitchChain } from 'wagmi'
 import { BatchCall, BatchIntentParams, signBatchIntent, signEIP7702Authorization } from '@/services/batch-executor'
 
+/** Re-use the EIP-1193 provider type declared in batch-executor.ts */
+type EIP1193Provider = NonNullable<Window['ethereum']>
+
 export type ExecutorStatus =
   | 'idle'
   | 'switching-chain'
@@ -55,13 +58,14 @@ export function useBatchExecutor({ executorContractAddress, relayerEndpoint }: U
 
       let eip7702Auth, revokeAuth
       try {
-        const results = await (window.ethereum as any).request({
+        const ethereum = window.ethereum as EIP1193Provider
+        const results = await ethereum.request({
           method: 'wallet_signBatchAuthorization',
           params: [{ from: address, authorizations: [
             { contractAddress: executorContractAddress, chainId: params.targetChainId, nonce: Number(params.nonce), label: 'Delegate to EIP7702Executor' },
             { contractAddress: ZERO_ADDRESS, chainId: params.targetChainId, nonce: Number(params.nonce) + 1, label: 'Revoke Delegation' },
           ]}],
-        })
+        }) as unknown[]
         eip7702Auth = normalizeAuth(results[0])
         revokeAuth  = normalizeAuth(results[1])
       } catch {
