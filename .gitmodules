@@ -1,0 +1,6 @@
+[submodule "executor/lib/openzeppelin-contracts"]
+	path = executor/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "executor/lib/forge-std"]
+	path = executor/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std

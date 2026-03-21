@@ -1,0 +1,21 @@
+# Node dependencies
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+.next/
+dist/
+build/
+
+# Foundry artifacts (in executor/ subproject)
+executor/out/
+executor/cache/
+executor/node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db

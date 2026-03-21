@@ -1,0 +1,13 @@
+# Foundry build artifacts
+out/
+cache/
+
+# Dependencies (installed via forge install)
+# lib/ is committed to track exact versions
+
+# Environment variables
+.env
+
+# Node dependencies (batch-executor.ts dependencies)
+node_modules/
+package-lock.json
