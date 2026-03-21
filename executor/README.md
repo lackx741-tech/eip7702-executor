@@ -1,6 +1,6 @@
-# EIP-7702 Executor
+# EIP-7702 Executor — Foundry
 
-A complete smart contract executor for EIP-7702. When delegated, it behaves exactly like a smart contract wallet — `address(this)` IS the user's EOA for the duration of the transaction.
+Solidity smart contracts for the EIP-7702 Executor system. When delegated, the executor runs with `address(this)` == the user's EOA for the full duration of the transaction.
 
 ## How It Works
 
@@ -22,66 +22,58 @@ EIP-7702 (Ethereum Pectra upgrade) allows an EOA to temporarily set its code to 
 | Batch calls | N protocol calls atomically |
 | Self-custodial | User signs exact calls — relayer cannot change them |
 
+## Prerequisites
+
+- [Foundry](https://book.getfoundry.sh/getting-started/installation) — install with `curl -L https://foundry.paradigm.xyz | bash && foundryup`
+- Git (for submodules)
+
+> **Note for Copilot coding agent:** the sandbox must allow outbound access to `foundry.paradigm.xyz` and `binaries.soliditylang.org` to install Foundry and the Solidity compiler.
+
+## Install
+
+```bash
+git submodule update --init --recursive
+```
+
+## Build
+
+```bash
+forge build
+```
+
+## Test
+
+```bash
+forge test -vvv
+```
+
+## Deploy — Testnet
+
+```bash
+forge script script/DeployTestnet.s.sol \
+  --rpc-url $RPC_URL \
+  --broadcast \
+  --private-key $PRIVATE_KEY
+```
+
+## Deploy — Mainnet (deterministic CREATE2 address)
+
+```bash
+forge script script/Deploy.s.sol \
+  --rpc-url $RPC_URL \
+  --broadcast \
+  --private-key $PRIVATE_KEY
+```
+
 ## Transaction Flow
 
 1. User signs EIP-7702 authorization (delegate EOA → executor contract)
 2. User signs EIP-712 BatchIntent (exact calls + tokens + destination)
 3. Relayer sends Type-4 tx with authorizationList to user's EOA
-4. EVM runs executeBatch() with address(this) == user's EOA
+4. EVM runs `executeBatch()` with `address(this)` == user's EOA
 5. Protocol calls execute as user's wallet
 6. Tokens sweep to destination
 7. Delegation revoked atomically
-
-## Prerequisites
-
-- [Foundry](https://book.getfoundry.sh/getting-started/installation)
-
-## Setup
-
-```bash
-cd executor
-forge install OpenZeppelin/openzeppelin-contracts
-forge install foundry-rs/forge-std
-forge build
-forge test -vvv
-```
-
-## Deploy to Sepolia
-
-```bash
-cp .env.example .env
-# Edit .env with your RELAYER_ADDRESS and PRIVATE_KEY
-
-source .env
-forge script script/Deploy.s.sol \
-  --rpc-url $SEPOLIA_RPC_URL \
-  --broadcast \
-  --verify \
-  -vvvv
-```
-
-## Deploy to All Chains (same address via CREATE2)
-
-Run against each chain RPC. The CREATE2 salt ensures identical address on every chain:
-
-```bash
-# Base
-forge script script/Deploy.s.sol --rpc-url $BASE_RPC_URL --broadcast --verify -vvvv
-
-# Arbitrum
-forge script script/Deploy.s.sol --rpc-url $ARBITRUM_RPC_URL --broadcast --verify -vvvv
-
-# Optimism
-forge script script/Deploy.s.sol --rpc-url $OPTIMISM_RPC_URL --broadcast --verify -vvvv
-```
-
-## After Deployment: Update Frontend
-
-In your Next.js app:
-```env
-NEXT_PUBLIC_EXECUTOR_ADDRESS=0xYOUR_DEPLOYED_ADDRESS
-NEXT_PUBLIC_RELAYER_ENDPOINT=https://your-relayer.com
-```
 
 ## Security
 
