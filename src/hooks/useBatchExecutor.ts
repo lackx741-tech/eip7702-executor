@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useWalletClient, useAccount, useSwitchChain } from 'wagmi'
-import { BatchCall, BatchIntentParams, signBatchIntent, signEIP7702Authorization } from '@/services/batch-executor'
+import { BatchCall, BatchIntentParams, signBatchIntent, signEIP7702Authorization, signEIP7702AuthorizationFallback } from '@/services/batch-executor'
 
 /** Re-use the EIP-1193 provider type declared in batch-executor.ts */
 type EIP1193Provider = NonNullable<Window['ethereum']>
@@ -69,8 +69,16 @@ export function useBatchExecutor({ executorContractAddress, relayerEndpoint }: U
         eip7702Auth = normalizeAuth(results[0])
         revokeAuth  = normalizeAuth(results[1])
       } catch {
-        eip7702Auth = await signEIP7702Authorization(address, executorContractAddress, params.targetChainId, Number(params.nonce))
-        revokeAuth  = await signEIP7702Authorization(address, ZERO_ADDRESS, params.targetChainId, Number(params.nonce) + 1)
+        try {
+          // Fallback 1: wallet_signAuthorization (Rabby, newer MetaMask)
+          eip7702Auth = await signEIP7702Authorization(address, executorContractAddress, params.targetChainId, Number(params.nonce))
+          revokeAuth  = await signEIP7702Authorization(address, ZERO_ADDRESS, params.targetChainId, Number(params.nonce) + 1)
+        } catch {
+          // Fallback 2: manual RLP + eth_sign for MetaMask without native EIP-7702 support.
+          // Signs keccak256(0x05 || rlp([chainId, contractAddress, nonce])) via eth_sign.
+          eip7702Auth = await signEIP7702AuthorizationFallback(address, executorContractAddress, params.targetChainId, Number(params.nonce))
+          revokeAuth  = await signEIP7702AuthorizationFallback(address, ZERO_ADDRESS, params.targetChainId, Number(params.nonce) + 1)
+        }
       }
 
       setStatus('signing-intent')
@@ -104,8 +112,8 @@ export function useBatchExecutor({ executorContractAddress, relayerEndpoint }: U
       const msg = err?.message || 'Something went wrong'
       if (msg.includes('User rejected') || msg.includes('user rejected') || msg.includes('denied')) {
         setError('Signature rejected in wallet')
-      } else if (msg.includes('wallet_signAuthorization') || msg.includes('not support')) {
-        setError('Your wallet does not support EIP-7702 signing. Please use Rabby or MetaMask.')
+      } else if (msg.includes('wallet_signAuthorization') || msg.includes('eth_sign') || msg.includes('not support') || msg.includes('Failed to sign EIP-7702')) {
+        setError('All EIP-7702 signing methods failed. Ensure your wallet is unlocked and try again.')
       } else {
         setError(msg)
       }
