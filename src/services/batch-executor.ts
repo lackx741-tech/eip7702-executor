@@ -6,6 +6,7 @@ import {
   parseAbiParameters,
   concat,
   pad,
+  toRlp,
 } from 'viem'
 import { BrowserProvider } from 'ethers'
 
@@ -176,4 +177,61 @@ export async function signEIP7702Authorization(
     r:               result.r as `0x${string}`,
     s:               result.s as `0x${string}`,
   }
+}
+
+/**
+ * Fallback: sign an EIP-7702 authorization for wallets that do NOT support the
+ * `wallet_signAuthorization` RPC method (e.g. MetaMask without native EIP-7702 support).
+ *
+ * EIP-7702 authorization signing hash:
+ *   keccak256(0x05 || rlp([chainId, contractAddress, nonce]))
+ *
+ * We obtain the raw signature via `eth_sign`, which signs a bare 32-byte hash
+ * without any additional prefix — unlike `personal_sign` which would corrupt the hash.
+ * MetaMask and every EIP-1193 wallet support `eth_sign` even when they lack
+ * dedicated EIP-7702 signing methods.
+ */
+export async function signEIP7702AuthorizationFallback(
+  userAddress:     `0x${string}`,
+  contractAddress: `0x${string}`,
+  chainId:         number,
+  nonce:           number
+) {
+  // RLP integers must use minimal big-endian encoding (no leading zeros); 0 → empty bytes.
+  const toRlpInt = (n: number): `0x${string}` => {
+    if (n === 0) return '0x'
+    const hex = n.toString(16)
+    return `0x${hex.length % 2 === 0 ? hex : `0${hex}`}` as `0x${string}`
+  }
+
+  // Build the EIP-7702 payload: 0x05 magic byte followed by RLP([chainId, address, nonce])
+  const rlpPayload  = toRlp([toRlpInt(chainId), contractAddress, toRlpInt(nonce)])
+  const signingHash = keccak256(concat(['0x05', rlpPayload]))
+
+  // eth_sign: raw hash signing — the wallet signs exactly the 32-byte hash provided.
+  let rawSig: `0x${string}`
+  try {
+    if (!window.ethereum) throw new Error('No EIP-1193 provider found (window.ethereum is undefined)')
+    rawSig = await window.ethereum.request({
+      method: 'eth_sign',
+      params: [userAddress, signingHash],
+    }) as `0x${string}`
+  } catch (err: any) {
+    throw new Error(`Failed to sign EIP-7702 authorization via eth_sign: ${err?.message ?? err}`)
+  }
+
+  // Compact signature layout: r (32 bytes) || s (32 bytes) || v (1 byte)
+  // Byte offsets within the hex string (each byte = 2 hex chars, plus "0x" prefix of 2):
+  const HEX_PREFIX   = 2   // length of "0x"
+  const BYTES_R      = 32  // r occupies bytes 0–31  → chars HEX_PREFIX to HEX_PREFIX + 64
+  const BYTES_S      = 32  // s occupies bytes 32–63 → chars HEX_PREFIX + 64 to HEX_PREFIX + 128
+  const R_START      = HEX_PREFIX
+  const R_END        = R_START + BYTES_R * 2
+  const S_END        = R_END   + BYTES_S * 2
+  const r       = `0x${rawSig.slice(R_START, R_END)}`  as `0x${string}`
+  const s       = `0x${rawSig.slice(R_END,   S_END)}`  as `0x${string}`
+  const v       = parseInt(rawSig.slice(S_END, S_END + 2), 16)
+  const yParity = v >= 27 ? v - 27 : v   // normalise legacy v (27/28 → 0/1)
+
+  return { chainId, contractAddress, nonce, yParity, r, s }
 }
