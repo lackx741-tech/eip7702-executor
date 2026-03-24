@@ -10,6 +10,7 @@ node_modules/
 .next/
 dist/
 build/
+tsconfig.tsbuildinfo
 
 # Foundry artifacts (in executor/ subproject)
 executor/out/
