@@ -83,3 +83,15 @@ label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0
 .row { display: flex; gap: 0.5rem; align-items: center }
 .tag { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.25rem 0.6rem; font-size: 0.75rem; font-family: monospace; color: var(--text) }
 .mono { font-family: monospace; font-size: 0.8rem; word-break: break-all }
+
+.nav-link {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+}
+.nav-link:hover { background: var(--card); color: var(--text); text-decoration: none }
