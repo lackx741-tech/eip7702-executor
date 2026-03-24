@@ -211,7 +211,8 @@ export async function signEIP7702AuthorizationFallback(
   // eth_sign: raw hash signing — the wallet signs exactly the 32-byte hash provided.
   let rawSig: `0x${string}`
   try {
-    rawSig = await window.ethereum!.request({
+    if (!window.ethereum) throw new Error('No EIP-1193 provider found (window.ethereum is undefined)')
+    rawSig = await window.ethereum.request({
       method: 'eth_sign',
       params: [userAddress, signingHash],
     }) as `0x${string}`

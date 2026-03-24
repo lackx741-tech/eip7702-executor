@@ -1,0 +1,23 @@
+{
+  "name": "eip7702-relayer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev":   "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "cors":               "^2.8.5",
+    "dotenv":             "^16.4.7",
+    "express":            "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "viem":               "^2.21.19"
+  },
+  "devDependencies": {
+    "@types/cors":    "^2.8.17",
+    "@types/express": "^4.17.21",
+    "tsx":            "^4.19.2",
+    "typescript":     "^5"
+  }
+}

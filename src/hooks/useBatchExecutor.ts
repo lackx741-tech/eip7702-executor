@@ -94,6 +94,7 @@ export function useBatchExecutor({ executorContractAddress, relayerEndpoint }: U
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          chainId: params.targetChainId,
           intent: { ...intent, calls: intent.calls.map(c => ({ ...c, value: c.value.toString() })), maxFeeWei: intent.maxFeeWei.toString(), deadline: intent.deadline.toString(), nonce: intent.nonce.toString() },
           signature, eip7702Authorization: eip7702Auth, revokeAuthorization: revokeAuth,
         }),
