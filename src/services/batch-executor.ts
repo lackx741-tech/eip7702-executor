@@ -132,7 +132,8 @@ export function hashTokens(tokens: `0x${string}`[]): `0x${string}` {
  * In EIP-7702, user's EOA IS the verifyingContract — this is correct and intentional.
  */
 export async function signBatchIntent(intent: BatchIntentParams, chainId: number): Promise<`0x${string}`> {
-  const ethersProvider = new BrowserProvider(window.ethereum as Parameters<typeof BrowserProvider>[0])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const ethersProvider = new BrowserProvider(window.ethereum as any)
   const signer = await ethersProvider.getSigner()
 
   const sig = await signer.signTypedData(
