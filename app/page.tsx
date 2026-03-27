@@ -9,6 +9,7 @@ import {
   buildHarvestCall,
   buildGetRewardCall,
   buildClaimCall,
+  buildCustomCall,
   BatchCall,
 } from '@/services/batch-executor'
 
@@ -38,6 +39,7 @@ type CallEntry =
   | { id: string; type: 'harvest';   farmContract: string }
   | { id: string; type: 'getReward'; stakingContract: string }
   | { id: string; type: 'claim';     rewardContract: string; recipient: string }
+  | { id: string; type: 'custom';    target: string; abiSig: string; args: string; valueEth: string }
 
 let _id = 0
 const uid = () => String(++_id)
@@ -75,6 +77,13 @@ export default function Page() {
   const [claimRecipient, setClaimRecipient] = useState('')
   const [tokenInput, setTokenInput]         = useState('')
 
+  /* ── custom call staging ── */
+  const [customTarget, setCustomTarget]     = useState('')
+  const [customAbiSig, setCustomAbiSig]     = useState('')
+  const [customArgs, setCustomArgs]         = useState('')
+  const [customValue, setCustomValue]       = useState('0')
+  const [customError, setCustomError]       = useState('')
+
   const { execute, status, txHash, error, reset } = useBatchExecutor({
     executorContractAddress: EXECUTOR_ADDRESS,
     relayerEndpoint:         RELAYER_ENDPOINT,
@@ -96,6 +105,30 @@ export default function Page() {
     setCallEntries(prev => [...prev, { id: uid(), type: 'claim', rewardContract: claimContract.trim(), recipient: claimRecipient.trim() || (address ?? '') }])
     setClaimContract(''); setClaimRecipient('')
   }
+  const addCustomCall = () => {
+    setCustomError('')
+    if (!customTarget.trim() || !customAbiSig.trim()) return
+    // Validate the signature + args immediately so the user gets instant feedback
+    try {
+      buildCustomCall(
+        customTarget.trim() as `0x${string}`,
+        customAbiSig.trim(),
+        customArgs.trim(),
+        customValue.trim() ? parseEther(customValue.trim()) : 0n,
+      )
+    } catch (err: any) {
+      setCustomError(err?.message ?? String(err))
+      return
+    }
+    setCallEntries(prev => [...prev, {
+      id: uid(), type: 'custom',
+      target:   customTarget.trim(),
+      abiSig:   customAbiSig.trim(),
+      args:     customArgs.trim(),
+      valueEth: customValue.trim() || '0',
+    }])
+    setCustomTarget(''); setCustomAbiSig(''); setCustomArgs(''); setCustomValue('0')
+  }
   const removeCall = (id: string) => setCallEntries(prev => prev.filter(c => c.id !== id))
 
   const addToken = () => {
@@ -112,6 +145,12 @@ export default function Page() {
     const calls: BatchCall[] = callEntries.map(e => {
       if (e.type === 'harvest')   return buildHarvestCall(e.farmContract as `0x${string}`, address)
       if (e.type === 'getReward') return buildGetRewardCall(e.stakingContract as `0x${string}`)
+      if (e.type === 'custom')    return buildCustomCall(
+        e.target as `0x${string}`,
+        e.abiSig,
+        e.args,
+        e.valueEth ? parseEther(e.valueEth) : 0n,
+      )
       return buildClaimCall(e.rewardContract as `0x${string}`, (e.recipient || address) as `0x${string}`)
     })
 
@@ -225,14 +264,76 @@ export default function Page() {
                 <button className="btn-ghost btn-sm" style={{ whiteSpace: 'nowrap' }} onClick={addClaim}>+ Add</button>
               </div>
             </div>
+          </div>
 
-            {/* call list */}
-            {callEntries.length > 0 && (
+          {/* ── Custom / Arbitrary Call ── */}
+          <div className="card">
+            <p className="section-title">Custom Call</p>
+            <p style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: '1rem' }}>
+              Call any contract function. Enter the contract address, a human-readable ABI signature, and comma-separated argument values. This lets you batch any on-chain action — swaps, LP operations, arbitrary protocol interactions — in a single EIP-7702 transaction.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.75rem' }}>
+              <div>
+                <label>Contract address</label>
+                <input
+                  value={customTarget}
+                  onChange={e => { setCustomTarget(e.target.value); setCustomError('') }}
+                  placeholder="0x…"
+                />
+              </div>
+              <div>
+                <label>Function signature — e.g. <code>transfer(address,uint256)</code> or <code>deposit()</code></label>
+                <input
+                  value={customAbiSig}
+                  onChange={e => { setCustomAbiSig(e.target.value); setCustomError('') }}
+                  placeholder="functionName(type1,type2,…)"
+                  style={{ fontFamily: 'monospace' }}
+                />
+              </div>
+              <div>
+                <label>Arguments (comma-separated, leave blank for no-arg functions)</label>
+                <input
+                  value={customArgs}
+                  onChange={e => { setCustomArgs(e.target.value); setCustomError('') }}
+                  placeholder="0xRecipient, 1000000"
+                  style={{ fontFamily: 'monospace' }}
+                />
+              </div>
+              <div style={{ maxWidth: 200 }}>
+                <label>ETH value to send (default: 0)</label>
+                <input
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  value={customValue}
+                  onChange={e => setCustomValue(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+
+            {customError && (
+              <p style={{ color: 'var(--error)', fontSize: '0.8rem', marginBottom: '0.5rem' }}>{customError}</p>
+            )}
+
+            <button
+              className="btn-ghost btn-sm"
+              style={{ whiteSpace: 'nowrap' }}
+              onClick={addCustomCall}
+              disabled={!customTarget.trim() || !customAbiSig.trim()}
+            >
+              + Add Custom Call
+            </button>
+
+            {/* call list — shown inside this card so custom calls are visible immediately */}
+            {callEntries.filter(e => e.type === 'custom').length > 0 && (
               <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                {callEntries.map((e, i) => (
+                {callEntries.map((e, globalIdx) => e.type !== 'custom' ? null : (
                   <div key={e.id} className="row" style={{ justifyContent: 'space-between', background: 'var(--surface)', borderRadius: 6, padding: '0.4rem 0.75rem' }}>
-                    <span className="mono">
-                      [{i + 1}] {e.type === 'harvest' ? `harvest  ${e.farmContract}` : e.type === 'getReward' ? `getReward  ${e.stakingContract}` : `claim  ${e.rewardContract}  →  ${e.recipient || address}`}
+                    <span className="mono" style={{ fontSize: '0.8rem' }}>
+                      [{globalIdx + 1}] {e.target.slice(0, 8)}…  {e.abiSig}{e.args ? `  (${e.args})` : ''}
+                      {Number(e.valueEth) > 0 ? `  +${e.valueEth} ETH` : ''}
                     </span>
                     <button className="btn-danger" onClick={() => removeCall(e.id)}>✕</button>
                   </div>
@@ -240,6 +341,23 @@ export default function Page() {
               </div>
             )}
           </div>
+
+          {/* ── Combined call queue ── */}
+          {callEntries.filter(e => e.type !== 'custom').length > 0 && (
+            <div className="card">
+              <p className="section-title">Protocol Call Queue</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {callEntries.map((e, globalIdx) => e.type === 'custom' ? null : (
+                  <div key={e.id} className="row" style={{ justifyContent: 'space-between', background: 'var(--surface)', borderRadius: 6, padding: '0.4rem 0.75rem' }}>
+                    <span className="mono">
+                      [{globalIdx + 1}] {e.type === 'harvest' ? `harvest  ${e.farmContract}` : e.type === 'getReward' ? `getReward  ${e.stakingContract}` : `claim  ${e.rewardContract}  →  ${e.recipient || address}`}
+                    </span>
+                    <button className="btn-danger" onClick={() => removeCall(e.id)}>✕</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ── Sweep Settings ── */}
           <div className="card">
@@ -323,7 +441,7 @@ export default function Page() {
 
           {!isReady && (
             <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: '0.8rem', marginTop: '-0.75rem' }}>
-              Add at least one protocol call or enable native sweep to proceed.
+              Add at least one protocol call, custom call, or enable native sweep to proceed.
             </p>
           )}
         </div>
