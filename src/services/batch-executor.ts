@@ -7,6 +7,7 @@ import {
   concat,
   pad,
   toRlp,
+  type Abi,
 } from 'viem'
 import { BrowserProvider } from 'ethers'
 
@@ -106,6 +107,84 @@ export function buildClaimCall(rewardContract: `0x${string}`, recipient: `0x${st
       args: [recipient],
     }),
   }
+}
+
+/**
+ * Build an arbitrary call from a human-readable ABI function signature and
+ * comma-separated arguments.
+ *
+ * @param target       Contract address to call
+ * @param abiSignature Human-readable function signature, e.g. "transfer(address,uint256)"
+ * @param argsRaw      Comma-separated argument values matching the signature, e.g. "0xAbc…,1000000"
+ * @param valueWei     ETH value to attach (default 0)
+ *
+ * @throws if the signature is invalid or argsRaw cannot be parsed
+ */
+export function buildCustomCall(
+  target:       `0x${string}`,
+  abiSignature: string,
+  argsRaw:      string,
+  valueWei:     bigint = 0n
+): BatchCall {
+  // Normalise: wrap in "function " if user omitted the keyword
+  const sig = abiSignature.trimStart().startsWith('function ')
+    ? abiSignature.trim()
+    : `function ${abiSignature.trim()}`
+
+  const abi = parseAbi([sig])
+
+  // Extract function name from the normalised signature
+  const funcName = sig.replace(/^function\s+/, '').replace(/\(.*$/, '').trim()
+
+  // Parse comma-separated args, respecting parenthesised tuples
+  const args = argsRaw.trim() === '' ? [] : splitArgs(argsRaw)
+
+  // Coerce individual args to the types declared in the ABI
+  const abiItem = abi[0] as { inputs?: { type: string }[] }
+  const inputs  = abiItem?.inputs ?? []
+  const coerced = args.map((raw, i) => coerceArg(raw.trim(), inputs[i]?.type ?? ''))
+
+  const data = encodeFunctionData({ abi: abi as Abi, functionName: funcName, args: coerced })
+  return { target, value: valueWei, data }
+}
+
+/** Split a comma-separated arg string, honouring nested parentheses (tuples). */
+function splitArgs(raw: string): string[] {
+  const result: string[] = []
+  let depth = 0
+  let cur   = ''
+  for (const ch of raw) {
+    if (ch === '(' || ch === '[') { depth++; cur += ch }
+    else if (ch === ')' || ch === ']') { depth--; cur += ch }
+    else if (ch === ',' && depth === 0) { result.push(cur); cur = '' }
+    else { cur += ch }
+  }
+  if (cur) result.push(cur)
+  return result
+}
+
+/** Best-effort coercion of a raw string argument to the JS type viem expects. */
+function coerceArg(raw: string, type: string): unknown {
+  if (!type) return raw
+  // uint / int → BigInt
+  if (/^u?int\d*$/.test(type)) {
+    try { return BigInt(raw) } catch {
+      throw new Error(`Cannot convert "${raw}" to BigInt for type ${type}`)
+    }
+  }
+  // bool
+  if (type === 'bool') return raw.toLowerCase() === 'true' || raw === '1'
+  // bytes → leave as hex string (viem accepts 0x-prefixed hex)
+  if (/^bytes\d*$/.test(type)) return raw as `0x${string}`
+  // address → as-is
+  if (type === 'address') return raw as `0x${string}`
+  // array
+  if (type.endsWith('[]') || type.endsWith(']')) {
+    try { return JSON.parse(raw) } catch {
+      throw new Error(`Cannot parse "${raw}" as array for type ${type}`)
+    }
+  }
+  return raw
 }
 
 /** Hash calls array — must match Solidity _hashCalls() */
