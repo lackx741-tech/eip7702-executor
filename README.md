@@ -25,6 +25,10 @@ Self-custodial batch execution via EIP-7702 delegation. Users sign an exact inte
 
 ```bash
 cd executor
+
+# IMPORTANT: populate OpenZeppelin + forge-std submodules
+git submodule update --init --recursive
+
 cp .env.example .env
 # Fill in: RELAYER_ADDRESS (the relayer's wallet), PRIVATE_KEY (deployer), SEPOLIA_RPC_URL
 
